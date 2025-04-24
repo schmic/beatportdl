@@ -13,6 +13,9 @@ github.com/google/uuid
 # github.com/grafov/m3u8 v0.12.0
 ## explicit; go 1.12
 github.com/grafov/m3u8
+# github.com/inconshreveable/mousetrap v1.1.0
+## explicit; go 1.18
+github.com/inconshreveable/mousetrap
 # github.com/kr/pretty v0.1.0
 ## explicit
 # github.com/mattn/go-colorable v0.1.13
@@ -27,6 +30,12 @@ github.com/mattn/go-runewidth
 # github.com/rivo/uniseg v0.4.7
 ## explicit; go 1.18
 github.com/rivo/uniseg
+# github.com/spf13/cobra v1.9.1
+## explicit; go 1.15
+github.com/spf13/cobra
+# github.com/spf13/pflag v1.0.6
+## explicit; go 1.12
+github.com/spf13/pflag
 # github.com/vbauerster/mpb/v8 v8.8.3
 ## explicit; go 1.17
 github.com/vbauerster/mpb/v8

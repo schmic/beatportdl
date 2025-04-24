@@ -2,24 +2,29 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/vbauerster/mpb/v8"
 	"io"
+	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"unspok3n/beatportdl/config"
 	"unspok3n/beatportdl/internal/beatport"
+
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/vbauerster/mpb/v8"
 )
 
 const (
 	configFilename = "beatportdl-config.yml"
 	cacheFilename  = "beatportdl-credentials.json"
 	errorFilename  = "beatportdl-err.log"
+)
+
+var (
+	outputDirectory string
 )
 
 type application struct {
@@ -41,20 +46,19 @@ type application struct {
 }
 
 func main() {
-	cfg, cachePath, err := Setup()
+	config, cachePath, err := Setup()
 	if err != nil {
-		fmt.Println(err.Error())
-		Pause()
+		log.Fatal(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	app := &application{
-		config:      cfg,
-		downloadSem: make(chan struct{}, cfg.MaxDownloadWorkers),
-		globalSem:   make(chan struct{}, cfg.MaxGlobalWorkers),
 		ctx:         ctx,
+		config:      config,
 		logWriter:   os.Stdout,
+		globalSem:   make(chan struct{}, config.MaxGlobalWorkers),
+		downloadSem: make(chan struct{}, config.MaxDownloadWorkers),
 	}
 
 	go func() {
@@ -73,7 +77,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	if cfg.WriteErrorLog {
+	if config.WriteErrorLog {
 		logFilePath, _, err := FindErrorLogFile()
 		if err != nil {
 			fmt.Println(err.Error())
@@ -87,54 +91,62 @@ func main() {
 		defer f.Close()
 	}
 
-	auth := beatport.NewAuth(cfg.Username, cfg.Password, cachePath)
-	bp := beatport.New(beatport.StoreBeatport, cfg.Proxy, auth)
-	bs := beatport.New(beatport.StoreBeatsource, cfg.Proxy, auth)
+	auth := beatport.NewAuth(config.Username, config.Password, cachePath)
+	app.bp = beatport.New(beatport.StoreBeatport, config.Proxy, auth)
+	app.bs = beatport.New(beatport.StoreBeatsource, config.Proxy, auth)
 
 	if err := auth.LoadCache(); err != nil {
-		if err := auth.Init(bp); err != nil {
+		if err := auth.Init(app.bp); err != nil {
 			app.FatalError("beatport", err)
 		}
 	}
 
-	app.bp = bp
-	app.bs = bs
+	app.pbp = mpb.New(mpb.WithAutoRefresh(), mpb.WithOutput(color.Output))
 
-	quitFlag := flag.Bool("q", false, "Quit the main loop after finishing")
-
-	flag.Parse()
-	inputArgs := flag.Args()
-
-	for _, arg := range inputArgs {
-		if strings.HasSuffix(arg, ".txt") {
-			app.parseTextFile(arg)
-		} else {
-			app.urls = append(app.urls, arg)
-		}
+	rootCmd := &cobra.Command{
+		Run: func(cmd *cobra.Command, args []string) {
+			// panic("TODO")
+		},
 	}
 
-	for {
-		if len(app.urls) == 0 {
-			app.mainPrompt()
-		}
-
-		app.pbp = mpb.New(mpb.WithAutoRefresh(), mpb.WithOutput(color.Output))
-		app.logWriter = app.pbp
-		app.activeFiles = make(map[string]struct{}, len(app.urls))
-
-		for _, url := range app.urls {
-			app.globalWorker(func() {
-				app.handleUrl(url)
-			})
-		}
-
-		app.wg.Wait()
-		app.pbp.Shutdown()
-
-		if *quitFlag || ctx.Err() != nil {
-			break
-		}
-
-		app.urls = []string{}
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal(err)
 	}
+
+	// quitFlag := flag.Bool("q", false, "Quit the main loop after finishing")
+	//
+	// flag.Parse()
+	// inputArgs := flag.Args()
+	//
+	// for _, arg := range inputArgs {
+	// 	if strings.HasSuffix(arg, ".txt") {
+	// 		app.parseTextFile(arg)
+	// 	} else {
+	// 		app.urls = append(app.urls, arg)
+	// 	}
+	// }
+	//
+	// for {
+	// 	if len(app.urls) == 0 {
+	// 		app.mainPrompt()
+	// 	}
+	//
+	// 	app.logWriter = app.pbp
+	// 	app.activeFiles = make(map[string]struct{}, len(app.urls))
+	//
+	// 	for _, url := range app.urls {
+	// 		app.globalWorker(func() {
+	// 			app.handleUrl(url)
+	// 		})
+	// 	}
+	//
+	// 	app.wg.Wait()
+	// 	app.pbp.Shutdown()
+	//
+	// 	if *quitFlag || ctx.Err() != nil {
+	// 		break
+	// 	}
+	//
+	// 	app.urls = []string{}
+	// }
 }
